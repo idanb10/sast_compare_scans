@@ -1,6 +1,0 @@
-# Configuration file
-SAST_username: username
-SAST_password: password
-SAST_auth_url: http://ec2-35-167-1-96.us-west-2.compute.amazonaws.com/CxRestAPI/auth/identity/connect/token
-SAST_api_url: http://ec2-35-167-1-96.us-west-2.compute.amazonaws.com/CxRestAPI
-
