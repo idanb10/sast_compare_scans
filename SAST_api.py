@@ -77,42 +77,77 @@ def SAST_get_project_latest_scan_id(access_token, project_name, SAST_api_url):
 
 
 
-def SAST_get_scan_id_by_date(access_token, project_id, SAST_api_url, scan_date):
+def SAST_get_scan_id_by_date(access_token, project_id, SAST_api_url, scan_date, search_direction='next'):
     try:
-        
         scans_url = f"{SAST_api_url}/sast/scans?projectId={project_id}"
         headers = {
             'Authorization': f'Bearer {access_token}'
         }
         response = requests.get(scans_url, headers=headers)
-        response.raise_for_status()  # Raise exception for HTTP errors
+        response.raise_for_status()
 
         project_scans = response.json()
         
-        latest_scan_id = None
-        latest_scan_time = None
+        selected_scan_id = None
+        selected_scan_date = None  # Store the actual date of the selected scan
+        target_scan_date = datetime.datetime.strptime(scan_date, '%Y-%m-%d').date()
+        closest_date = datetime.date.max if search_direction == 'next' else datetime.date.min
         
         for scan in project_scans:
-            date_and_time = scan.get('dateAndTime')
-            if date_and_time is None:
-                continue
+            date_and_time = scan.get('dateAndTime', {})
+            if date_and_time:
+                scan_date_time_str = date_and_time.get('startedOn')
+                if scan_date_time_str:
+                    scan_date_obj = datetime.datetime.strptime(scan_date_time_str, '%Y-%m-%dT%H:%M:%S.%f').date()
+                    if (search_direction == 'next' and scan_date_obj >= target_scan_date and scan_date_obj < closest_date) or \
+                        (search_direction == 'last' and scan_date_obj <= target_scan_date and scan_date_obj > closest_date):
+                        closest_date = scan_date_obj
+                        selected_scan_id = scan['id']
+                        selected_scan_date = scan_date_obj
+                        
 
-            scan_date_time = date_and_time.get('startedOn')
-            if scan_date_time:
-                scan_date_obj = datetime.datetime.strptime(scan_date_time, '%Y-%m-%dT%H:%M:%S.%f')
-
-                if scan_date_obj.date() == datetime.datetime.strptime(scan_date, '%Y-%m-%d').date():
-                    finished_scan_status = scan.get('finishedScanStatus')
-                    if finished_scan_status and finished_scan_status.get('id') != 0:  # Not to include cancelled scans
-                        if latest_scan_time is None or scan_date_obj > latest_scan_time:
-                            latest_scan_time = scan_date_obj
-                            latest_scan_id = scan['id']
-        print(f"Scan id : {latest_scan_id}")                    
-        
-        return latest_scan_id or ""
+        if selected_scan_id and selected_scan_date:
+            print(f"SAST_api.SAST_get_scan_id_by_date : Selected scan id = {selected_scan_id}, selected scan date = {selected_scan_date}")
+            return selected_scan_id, selected_scan_date
+        else:
+            return None, None
         
     except Exception as e:
         print(f"Exception: SAST_get_scan_id_by_date: {e}")
-        return ""
-  
+        return None, None
     
+    
+    
+  
+def SAST_list_scan_vulnerabilities_with_scan_id(access_token, SAST_api_url, scan_id):        
+    try:
+      
+        scan_results_url = f"{SAST_api_url}/sast/scans/{scan_id}/resultsStatistics"
+        
+        headers = {'Authorization': f'Bearer {access_token}'}
+        
+        response = requests.get(scan_results_url, headers=headers)
+        response.raise_for_status()
+        scan_results = response.json()
+        
+        simplified_scan_results = {
+            'High': scan_results.get('highSeverity', 0),
+            'Medium': scan_results.get('mediumSeverity', 0),
+            'Low': scan_results.get('lowSeverity', 0)
+        }
+        return simplified_scan_results
+        
+    except Exception as e:
+        print(f"Exception: {e}")
+        return ""            
+
+
+def compare_scan_vulnerabilities(old_scan_results, new_scan_results):
+    
+    fixed = {
+        'High': max(0, old_scan_results['High'] - new_scan_results['High']),
+        'Medium': max(0, old_scan_results['Medium'] - new_scan_results['Medium']),
+        'Low': max(0, old_scan_results['Low'] - new_scan_results['Low'])
+    }
+    return fixed
+
