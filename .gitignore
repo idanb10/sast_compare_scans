@@ -1,2 +1,4 @@
 config_rep.yaml
 __pycache__/
+*.txt
+*.csv
