@@ -1,10 +1,11 @@
+import dateutil.parser
 import SAST_api
-import requests
 import sys
 import yaml
 import csv
 import os
 import datetime
+import dateutil
 
 # Open the YAML file
 with open('config_rep.yaml', 'r') as file:
@@ -44,7 +45,7 @@ def SAST_compare_two_scans_by_date(SAST_username, SAST_password, SAST_auth_url, 
         print(f"create_sast_comparison.SAST_compare_two_scans_by_date : New scan on {new_scan_real_date} results - {new_scan_results}")
         
         fixed_vulnerabilities = SAST_api.compare_scan_vulnerabilities(old_scan_results, new_scan_results)
-        print(f"Fixed : {fixed_vulnerabilities}")
+        print(f"create_sast_comparison.SAST_compare_two_scans_by_date : Fixed vulnerabilities {fixed_vulnerabilities}")
         
         write_scan_results_to_csv(project_name, old_scan_date, \
             new_scan_date, old_scan_results, new_scan_results, fixed_vulnerabilities)
@@ -64,12 +65,11 @@ def compare_scans_across_all_projects(SAST_username, SAST_password, SAST_auth_ur
     for project in projects:
         project_name = project['name']
         print(f"Comparing scans for project: {project_name}")
-        SAST_compare_two_scans_by_date(SAST_username, SAST_password, SAST_auth_url, SAST_api_url, project_name, old_scan_date, new_scan_date)
-        
+        SAST_compare_two_scans_by_date(SAST_username, SAST_password, SAST_auth_url, SAST_api_url, project_name, old_scan_date, new_scan_date)        
 
 def write_scan_results_to_csv(project_name, old_scan_date, new_scan_date, old_scan_results, new_scan_results, fixed_vulnerabilities):
 
-    csv_file = f'SAST_Results_Comparison_For_{old_scan_date}-{new_scan_date}.csv'
+    csv_file = f'SAST_Results_Comparison_For_{old_scan_date}_to_{new_scan_date}.csv'
     
     file_exists = os.path.isfile(csv_file)
     with open(csv_file, mode='a', newline='') as file:
@@ -82,24 +82,44 @@ def write_scan_results_to_csv(project_name, old_scan_date, new_scan_date, old_sc
                          old_scan_results['High'], old_scan_results['Medium'], old_scan_results['Low'],
                          new_scan_results['High'], new_scan_results['Medium'], new_scan_results['Low']])
 
+def validate_and_parse_date(date_str):
+    try:
+        return dateutil.parser.parse(date_str, dayfirst=True).date()
+    except ValueError:
+        print(f"Invalid date format: {date_str}. Please use a valid date format like 'DD-MM-YYYY'.")
+        return None
+
 ##################################################
 # main code
 ######<###########################################
 
 def main():
-    if len(sys.argv) == 3:
-        old_scan_date = sys.argv[1]
-        new_scan_date = sys.argv[2]
-        compare_scans_across_all_projects(SAST_username, SAST_password, SAST_auth_url, SAST_api_url, old_scan_date, new_scan_date)
-        
-    elif len(sys.argv) == 4:
-        project_name = sys.argv[1]
-        old_scan_date = sys.argv[2]
-        new_scan_date = sys.argv[3]
-        SAST_compare_two_scans_by_date(SAST_username, SAST_password, SAST_auth_url, SAST_api_url, project_name, old_scan_date, new_scan_date)
-    else:
-        print(f'Usage: {sys.argv[0]} [optional : <project_name>] <old_scan_date: YYYY-MM-DD> <new_scan_date: YYYY-MM-DD>')
+    if len(sys.argv) not in [3, 4]:
+        print(f'Usage: {sys.argv[0]} [optional : <project_name>] <old_scan_date: DD/MM/YYYY> <new_scan_date: DD/MM/YYYY')
         exit()
+        
+    old_scan_date_str = sys.argv[-2]
+    new_scan_date_str = sys.argv[-1]
+
+    old_scan_date = validate_and_parse_date(old_scan_date_str)
+    new_scan_date = validate_and_parse_date(new_scan_date_str)
+
+    if old_scan_date is None or new_scan_date is None:
+        print("One or more dates are invalid.")
+        exit()
+        
+    if old_scan_date > new_scan_date :
+        print("The first date should be the old date, the second date should be the new date.")
+        exit()
+        
+    old_scan_date_str = old_scan_date.strftime('%Y-%m-%d')
+    new_scan_date_str = new_scan_date.strftime('%Y-%m-%d')
+
+    if len(sys.argv) == 3:
+        compare_scans_across_all_projects(SAST_username, SAST_password, SAST_auth_url, SAST_api_url, old_scan_date_str, new_scan_date_str)
+    else:
+        project_name = sys.argv[1]
+        SAST_compare_two_scans_by_date(SAST_username, SAST_password, SAST_auth_url, SAST_api_url, project_name, old_scan_date_str, new_scan_date_str)
     
 if __name__ == '__main__':
     main()
